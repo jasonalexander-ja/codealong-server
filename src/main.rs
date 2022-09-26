@@ -5,6 +5,7 @@ extern crate serde;
 extern crate futures;
 
 use utils::settings::AppSettings;
+use models::response::Count;
 use models::session::{
     Session,
     SessionStore
@@ -67,13 +68,21 @@ async fn main() {
 
     let session_filter = warp::any().map(move || session_state.clone());
 
-    let available_sessions = warp::path("available")
+    let available_sessions = warp::path("available_active")
         .and(warp::get())
         .and(settings_filter.clone())
         .and(session_filter.clone())
-        .and_then(available_sessions);
+        .and_then(available_active_sessions);
 
-    let sessions = warp::path("session").and(available_sessions);
+    let session_capacity = warp::path("available_active")
+        .and(warp::get())
+        .and(settings_filter.clone())
+        .and(session_filter.clone())
+        .and_then(sessions_capacity);
+
+    let sessions = warp::path("session")
+        .and(available_sessions)
+        .or(session_capacity);
 
     let adjust = warp::path("adjust")
         .and(warp::path::param())
@@ -132,7 +141,19 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 8080)).await;
 }
 
-async fn available_sessions(settings: AppSettings, state: SessionStore) -> Result<impl Reply, Rejection> {
+async fn sessions_capacity(settings: AppSettings, state: SessionStore) -> Result<impl Reply, Rejection> {
+    let mapped_sessions_fut = state.iter().map(|(key, value)| async {
+        if value.users.read().await.len() < settings.max_sess_users {
+            return Some(key.clone());
+        }
+        return None;
+    });
+    let mapped_sessions = join_all(mapped_sessions_fut).await;
+    let filtered_sessions: Vec<String> = mapped_sessions.into_iter().flatten().collect();
+    Ok(warp::reply::json(&Count::new(filtered_sessions.len())))
+}
+
+async fn available_active_sessions(settings: AppSettings, state: SessionStore) -> Result<impl Reply, Rejection> {
     let mapped_sessions_fut = state.iter().map(|(key, value)| async {
         if value.users.read().await.len() < settings.max_sess_users {
             return Some(key.clone());
