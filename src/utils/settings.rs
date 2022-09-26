@@ -2,6 +2,7 @@ use std::env;
 extern crate dotenv;
 use dotenv::dotenv;
 
+#[derive(Clone)]
 pub struct AppSettings {
     pub max_sessions: usize,
     pub max_sess_users: usize,

@@ -1,8 +1,16 @@
 mod utils;
 mod models;
 
-use utils::settings::{AppSettings};
-use models::session;
+extern crate serde;
+extern crate futures;
+
+use utils::settings::AppSettings;
+use models::session::{
+    Session,
+    SessionStore
+};
+
+use models::errors;
 
 use std::collections::HashMap;
 use std::sync::{
@@ -10,11 +18,12 @@ use std::sync::{
     Arc,
 };
 
+use futures::future::join_all;
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
-use warp::{Filter};
+use warp::{Filter, Reply, Rejection};
 
 /// Our global unique user id counter.
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
@@ -44,13 +53,27 @@ type Users = Arc<RwLock<HashMap<usize, User>>>;
 async fn main() {
     pretty_env_logger::init();
 
-    let _app_settings = AppSettings::new();
+    let app_settings = AppSettings::new();
+
+    let session_state = SessionStore::default();
 
     // Keep track of all connected users, key is usize, value
     // is a websocket sender.
     let users = Users::default();
     // Turn our "state" into a new Filter...
     let users_filter = warp::any().map(move || users.clone());
+
+    let settings_filter = warp::any().map(move || app_settings.clone());
+
+    let session_filter = warp::any().map(move || session_state.clone());
+
+    let available_sessions = warp::path("available")
+        .and(warp::get())
+        .and(settings_filter.clone())
+        .and(session_filter.clone())
+        .and_then(available_sessions);
+
+    let sessions = warp::path("session").and(available_sessions);
 
     let adjust = warp::path("adjust")
         .and(warp::path::param())
@@ -104,9 +127,21 @@ async fn main() {
     // GET / -> index html
     let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
 
-    let routes = index.or(chat).or(poll).or(adjust);
+    let routes = index.or(chat).or(poll).or(adjust).or(sessions);
 
     warp::serve(routes).run(([127, 0, 0, 1], 8080)).await;
+}
+
+async fn available_sessions(settings: AppSettings, state: SessionStore) -> Result<impl Reply, Rejection> {
+    let mapped_sessions_fut = state.iter().map(|(key, value)| async {
+        if value.users.read().await.len() < settings.max_sess_users {
+            return Some(key.clone());
+        }
+        return None;
+    });
+    let mapped_sessions = join_all(mapped_sessions_fut).await;
+    let filtered_sessions: Vec<String> = mapped_sessions.into_iter().flatten().collect();
+    Ok(warp::reply::json(&filtered_sessions))
 }
 
 async fn user_connected(ws: WebSocket, users: Users) {

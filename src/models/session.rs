@@ -1,21 +1,30 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+extern crate serde;
+
 use tokio::sync::{mpsc, RwLock};
 use warp::ws::Message;
 
-type File = Vec<RwLock<String>>;
+
+pub type File = Vec<RwLock<String>>;
 
 #[derive(Default)]
-struct Directory {
-    pub files: HashMap<String, File>,
-    pub subdirs: HashMap<String, Directory>
+pub struct Directory {
+    pub files: RwLock<HashMap<String, File>>,
+    pub subdirs: RwLock<HashMap<String, Directory>>
+}
+
+pub struct UserState {
+    sender: mpsc::UnboundedSender<Message>,
+    currently_editing: Option<(String, usize)>,
+    name: String
 }
 
 #[derive(Default)]
-struct Session {
+pub struct Session {
     pub rootdir: Directory,
-    pub users: HashMap<String, mpsc::UnboundedSender<Message>>
+    pub users: RwLock<HashMap<String, UserState>>
 }
 
-type SessionStore = Arc<HashMap<String, Session>>;
+pub type SessionStore = Arc<HashMap<String, Session>>;
