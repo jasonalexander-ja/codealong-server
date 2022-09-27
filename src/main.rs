@@ -12,6 +12,7 @@ use models::session::{
     Session,
     SessionStore
 };
+use endpoints::session;
 
 use models::errors;
 
@@ -78,13 +79,13 @@ async fn main() {
         .and(warp::get())
         .and(settings_filter.clone())
         .and(session_filter.clone())
-        .and_then(available_active_sessions);
+        .and_then(session::available_active_sessions);
 
     let session_capacity = warp::path("capacity")
         .and(warp::get())
         .and(settings_filter.clone())
         .and(session_filter.clone())
-        .and_then(sessions_capacity);
+        .and_then(session::sessions_capacity);
     
     let sessions = available_sessions.or(session_capacity);
 
