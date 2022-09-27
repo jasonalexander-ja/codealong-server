@@ -1,5 +1,7 @@
 mod utils;
 mod models;
+mod endpoints;
+mod logic;
 
 extern crate serde;
 extern crate futures;
@@ -68,21 +70,31 @@ async fn main() {
 
     let session_filter = warp::any().map(move || session_state.clone());
 
+
+
+
+
     let available_sessions = warp::path("available_active")
         .and(warp::get())
         .and(settings_filter.clone())
         .and(session_filter.clone())
         .and_then(available_active_sessions);
 
-    let session_capacity = warp::path("available_active")
+    let session_capacity = warp::path("capacity")
         .and(warp::get())
         .and(settings_filter.clone())
         .and(session_filter.clone())
         .and_then(sessions_capacity);
+    
+    let sessions = available_sessions.or(session_capacity);
 
     let sessions = warp::path("session")
-        .and(available_sessions)
-        .or(session_capacity);
+        .and(sessions);
+
+
+
+
+
 
     let adjust = warp::path("adjust")
         .and(warp::path::param())
