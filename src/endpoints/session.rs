@@ -4,26 +4,54 @@ use crate::{
     utils::settings::AppSettings
 };
 
-use warp::reply::{
-    self,
-    Reply,
-};
+use warp::Filter;
+use warp::filters::BoxedFilter;
+use warp::reply::{self, Reply};
 use warp::reject::Rejection;
 
 
-pub async fn sessions_capacity(
-    settings: AppSettings, 
-    state: SessionStore
-) -> Result<impl Reply, Rejection> {
-    let result = session_logic::sessions_capacity(settings, state).await;
-    return Ok(reply::json(&result));
+fn capacity_filters(
+    session: &BoxedFilter<(SessionStore, )>, 
+    settings: &BoxedFilter<(AppSettings, )>
+) -> BoxedFilter<(impl Reply,)> {
+    warp::path("capacity")
+        .and(warp::get())
+        .and(settings.clone())
+        .and(session.clone())
+        .and_then(|settings, state| async {
+            let result = session_logic::sessions_capacity(settings, state).await;
+            Ok::<_, Rejection>(reply::json(&result))
+        })
+        .boxed()
 }
 
-pub async fn available_active_sessions(
-    settings: AppSettings, 
-    state: SessionStore
-) -> Result<impl Reply, Rejection> {
-    let result = session_logic::available_active_sessions(settings, state).await;
-    return Ok(reply::json(&result));
+fn available_filters(
+    session: &BoxedFilter<(SessionStore, )>, 
+    settings: &BoxedFilter<(AppSettings, )>
+) -> BoxedFilter<(impl Reply, )> {
+    warp::path("available_active")
+        .and(warp::get())
+        .and(settings.clone())
+        .and(session.clone())
+        .and_then(|settings, state| async {
+            let result = session_logic::available_active_sessions(settings, state).await;
+            Ok::<_, Rejection>(reply::json(&result))
+        })
+        .boxed()
+}
+
+pub fn make_session_filters(
+    session: &BoxedFilter<(SessionStore, )>, 
+    settings: &BoxedFilter<(AppSettings, )>
+) -> BoxedFilter<(impl Reply, )> {
+
+    let available_sessions = available_filters(session, settings);
+    let session_capacity = capacity_filters(session, settings);
+    
+    let sessions = available_sessions.or(session_capacity);
+
+    warp::path("session")
+        .and(sessions)
+        .boxed()
 }
 

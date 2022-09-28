@@ -7,14 +7,9 @@ extern crate serde;
 extern crate futures;
 
 use utils::settings::AppSettings;
-use models::response::Count;
-use models::session::{
-    Session,
-    SessionStore
-};
-use endpoints::session;
-
-use models::errors;
+use models::session::SessionStore;
+use endpoints::session as session_endpoints;
+use endpoints::user as user_endpoints;
 
 use std::collections::HashMap;
 use std::sync::{
@@ -22,12 +17,11 @@ use std::sync::{
     Arc,
 };
 
-use futures::future::join_all;
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
-use warp::{Filter, Reply, Rejection};
+use warp::{Filter, filters::BoxedFilter};
 
 /// Our global unique user id counter.
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
@@ -66,68 +60,17 @@ async fn main() {
     let users = Users::default();
     // Turn our "state" into a new Filter...
     let users_filter = warp::any().map(move || users.clone());
-
-    let settings_filter = warp::any().map(move || app_settings.clone());
-
-    let session_filter = warp::any().map(move || session_state.clone());
-
-
-
-
-
-    let available_sessions = warp::path("available_active")
-        .and(warp::get())
-        .and(settings_filter.clone())
-        .and(session_filter.clone())
-        .and_then(session::available_active_sessions);
-
-    let session_capacity = warp::path("capacity")
-        .and(warp::get())
-        .and(settings_filter.clone())
-        .and(session_filter.clone())
-        .and_then(session::sessions_capacity);
     
-    let sessions = available_sessions.or(session_capacity);
+    let settings_filter: BoxedFilter<(AppSettings, )> = warp::any()
+        .map(move || app_settings.clone())
+        .boxed();
 
-    let sessions = warp::path("session")
-        .and(sessions);
+    let session_filter: BoxedFilter<(SessionStore, )> = warp::any()
+        .map(move || session_state.clone())
+        .boxed();
 
-
-
-
-
-
-    let adjust = warp::path("adjust")
-        .and(warp::path::param())
-        .and(warp::get())
-        .and(users_filter.clone())
-        .and_then(|user_id: usize, users: Users| async move {
-            let users = users.read().await;
-            let user = if let Some(v) = users.get(&user_id) {
-                v
-            } else {
-                return Err(warp::reject::not_found());
-            };
-            let mut m = user.messages.write().await;
-            *m += 1;
-
-            Ok(warp::http::Response::new(format!("User {user_id} has sent {m} messages")))
-        })
-        .map(|r1: warp::http::Response<String>| r1);
-
-    let poll = warp::path("poll")
-        .and(warp::get())
-        .and(users_filter.clone())
-        .and_then(|users: Users| async move {
-            let users = users.read().await.len();
-
-            if users == 0 {
-                return Err(warp::reject::not_found())
-            }
-
-            Ok(warp::http::Response::new(format!("Hello world {users}")))
-        })
-        .map(|r1: warp::http::Response<String>| r1);
+    let sessions = session_endpoints::make_session_filters(&session_filter, &settings_filter);
+    let users = user_endpoints::make_users_filters(&session_filter, &settings_filter);
 
     // GET /chat -> websocket upgrade
     let chat = warp::path("chat")
@@ -149,34 +92,18 @@ async fn main() {
     // GET / -> index html
     let index = warp::path::end().map(|| warp::reply::html(INDEX_HTML));
 
-    let routes = index.or(chat).or(poll).or(adjust).or(sessions);
+    let routes = index.or(chat)
+        .or(sessions)
+        .or(users);
 
     warp::serve(routes).run(([127, 0, 0, 1], 8080)).await;
 }
 
-async fn sessions_capacity(settings: AppSettings, state: SessionStore) -> Result<impl Reply, Rejection> {
-    let mapped_sessions_fut = state.iter().map(|(key, value)| async {
-        if value.users.read().await.len() < settings.max_sess_users {
-            return Some(key.clone());
-        }
-        return None;
-    });
-    let mapped_sessions = join_all(mapped_sessions_fut).await;
-    let filtered_sessions: Vec<String> = mapped_sessions.into_iter().flatten().collect();
-    Ok(warp::reply::json(&Count::new(filtered_sessions.len())))
-}
 
-async fn available_active_sessions(settings: AppSettings, state: SessionStore) -> Result<impl Reply, Rejection> {
-    let mapped_sessions_fut = state.iter().map(|(key, value)| async {
-        if value.users.read().await.len() < settings.max_sess_users {
-            return Some(key.clone());
-        }
-        return None;
-    });
-    let mapped_sessions = join_all(mapped_sessions_fut).await;
-    let filtered_sessions: Vec<String> = mapped_sessions.into_iter().flatten().collect();
-    Ok(warp::reply::json(&filtered_sessions))
-}
+
+
+
+
 
 async fn user_connected(ws: WebSocket, users: Users) {
     // Use a counter to assign a new unique ID for this user.

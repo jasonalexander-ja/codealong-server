@@ -15,6 +15,7 @@ pub struct Directory {
     pub subdirs: RwLock<HashMap<String, Directory>>
 }
 
+#[allow(dead_code)]
 pub struct UserState {
     sender: mpsc::UnboundedSender<Message>,
     currently_editing: Option<(String, usize)>,
@@ -27,4 +28,4 @@ pub struct Session {
     pub users: RwLock<HashMap<String, UserState>>
 }
 
-pub type SessionStore = Arc<HashMap<String, Session>>;
+pub type SessionStore = Arc<RwLock<HashMap<String, Session>>>;
