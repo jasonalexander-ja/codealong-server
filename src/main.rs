@@ -119,6 +119,7 @@ async fn user_connected(ws: WebSocket, users: Users) {
     let (tx, rx) = mpsc::unbounded_channel();
     let mut rx = UnboundedReceiverStream::new(rx);
 
+
     tokio::task::spawn(async move {
         while let Some(message) = rx.next().await {
             user_ws_tx
@@ -179,10 +180,6 @@ async fn user_message(my_id: usize, msg: Message, users: &Users) {
                 // should be happening in another task, nothing more to
                 // do here.
             }
-        } else {
-            let mut v = user.messages.write().await;
-            *v += 1;
-            println!("User {my_id} has sent {v} messages. ");
         }
     }
 }

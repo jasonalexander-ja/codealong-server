@@ -1,10 +1,20 @@
 use crate::{
     utils::settings::AppSettings,
-    models::session::SessionStore,
+    models::errors::CodealongError,
+    models::session::{SessionStore, Session},
+    models::user_activity::UserActivity,
     models::response::Count
 };
+use super::user as user_logic;
 
 use futures::future::join_all;
+
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc;
+
+use warp::Reply;
+
+use uuid::Uuid;
 
 
 pub async fn sessions_capacity(
@@ -38,4 +48,47 @@ pub async fn available_active_sessions(
     let mapped_sessions = join_all(mapped_sessions_fut).await;
 
     mapped_sessions.into_iter().flatten().collect()
+}
+
+pub async fn make_new_session(
+    user_name: String,
+    ws: warp::ws::Ws, 
+    settings: AppSettings, 
+    sessions_str: SessionStore
+) -> Result<impl Reply, CodealongError> {
+    let (tx, rx) = mpsc::unbounded_channel::<UserActivity>();
+
+    let (session_id, user_id) = match check_add_session(settings.max_sessions, 
+        user_name, 
+        &sessions_str, 
+        tx
+    ).await {
+        Ok(v) => v,
+        Err(e) => return Err(e)
+    };
+
+    let res_future = ws.on_upgrade(move |socket| 
+        user_logic::user_thread(user_id, session_id, socket, sessions_str, rx)
+    );
+
+    Ok(res_future)
+}
+
+async fn check_add_session(
+    max_sessions: usize,
+    user_name: String,
+    sessions_str: &SessionStore,
+    tx: UnboundedSender<UserActivity>
+) -> Result<(String, String), CodealongError> {
+    let mut sessions = sessions_str.write().await;
+
+    if sessions.len() <= max_sessions {
+        return Err(CodealongError::MaxCapacity)
+    }
+
+    let session_id = Uuid::new_v4().to_string();
+    let user_id = Uuid::new_v4().to_string();
+    let session = Session::new(user_name, user_id.clone(), tx);
+    sessions.insert(session_id.clone(), session);
+    Ok((session_id, user_id))
 }

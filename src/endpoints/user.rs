@@ -1,11 +1,13 @@
 use crate::{
+    logic::user as user_logic,
     models::session::SessionStore,
-    utils::settings::AppSettings
+    utils::settings::AppSettings,
 };
 
 use warp::Filter;
 use warp::filters::BoxedFilter;
 use warp::reply::Reply;
+use warp::reject;
 use warp::reject::Rejection;
 
 
@@ -16,27 +18,23 @@ fn join_session(
     warp::path("join")
         .and(warp::ws())
         .and(warp::path::param())
+        .and(warp::path::param())
         .and(settings.clone())
         .and(session.clone())
-        .and_then(|ws: warp::ws::Ws, session_id: String, settings: AppSettings, sessions_str: SessionStore| async {
-
-            let sessions = sessions_str.read().await;
-
-            let session = match sessions.get(&session_id) {
-                Some(val) => val,
-                _ => return Err(warp::reject())
-            };
-            let users = session.users.read().await;
-
-            if users.len() <= settings.max_sess_users {
-                return Err(warp::reject())
+        .and_then(|
+            ws: warp::ws::Ws, 
+            session_id: String, 
+            user_name: String,
+            settings: AppSettings, 
+            sessions_str: SessionStore
+        | async move {
+            match user_logic::new_user(session_id, user_name, ws, settings, sessions_str).await {
+                Ok(val) => Ok::<_, Rejection>(val),
+                Err(err) => Err(reject::custom(err))
             }
-
-            Ok::<_, Rejection>(ws.on_upgrade(move |socket| {}))
         })
         .boxed()
 }
-
 
 pub fn make_users_filters(
     session: &BoxedFilter<(SessionStore, )>, 
