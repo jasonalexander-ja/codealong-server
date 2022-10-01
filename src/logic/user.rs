@@ -2,10 +2,13 @@ use crate::{
     models::session::SessionStore,
     models::session::Session,
     models::session::UserState,
+    models::session::SessionMessage,
     models::user_activity::UserActivity,
     models::errors::CodealongError,
     utils::settings::AppSettings
 };
+
+use super::session as session_logic;
 
 use warp::filters::ws;
 use warp::reply::Reply;
@@ -32,7 +35,7 @@ pub async fn new_user(
     settings: AppSettings, 
     sessions_str: SessionStore
 ) -> Result<impl Reply, CodealongError> {
-    let (tx, rx) = mpsc::unbounded_channel::<UserActivity>();
+    let (tx, rx) = mpsc::unbounded_channel::<SessionMessage>();
 
     let new_user = UserState::new(user_name, tx);
 
@@ -83,7 +86,7 @@ pub async fn user_thread(
     session_id: String,
     ws: ws::WebSocket,
     sessions: SessionStore,
-    user_rx: UnboundedReceiver<UserActivity>
+    user_rx: UnboundedReceiver<SessionMessage>
 ) {
     let (user_ws_tx, mut user_ws_rx) = ws.split();
     let rx = UnboundedReceiverStream::new(user_rx);
@@ -102,7 +105,7 @@ pub async fn user_thread(
 }
 
 async fn process_user_response(user_id: String, sess_id: String, msg: Message, sessions: &SessionStore) {
-    let msg = match extract_message(&msg).await {
+    let msg = match extract_message(&msg) {
         Some(val) => val,
         _ => return
     };
@@ -112,9 +115,15 @@ async fn process_user_response(user_id: String, sess_id: String, msg: Message, s
         _ => return
     };
     send_user_data(session, &user_id, &msg).await;
+
+    match msg {
+        UserActivity::RequestSync => 
+            session_logic::stream_out_session(&user_id, &sess_id, sessions).await,
+        _ => ()
+    };
 }
 
-async fn extract_message(msg: &Message) -> Option<UserActivity> {
+fn extract_message(msg: &Message) -> Option<UserActivity> {
     let msg_text = match msg.to_str() {
         Ok(v) => v,
         Err(_) => return None
@@ -130,7 +139,8 @@ async fn send_user_data(session: &Session, user_id: &String, msg: &UserActivity)
         if uid == user_id {
             continue;
         }
-        if let Err(_err) = user.sender.send(msg.clone()) {
+        let sess_msg = SessionMessage::UserActivity(msg.clone());
+        if let Err(_err) = user.sender.send(sess_msg) {
             // The tx is disconected since the user thread has exited 
             // this will only happen when the user disconects 
             // which will be handled 
@@ -139,7 +149,7 @@ async fn send_user_data(session: &Session, user_id: &String, msg: &UserActivity)
 }
 
 fn user_send_task(
-    rx: UnboundedReceiverStream<UserActivity>,
+    rx: UnboundedReceiverStream<SessionMessage>,
     user_ws_tx: SplitSink<ws::WebSocket, Message>
 ) {
     let mut rx = rx;

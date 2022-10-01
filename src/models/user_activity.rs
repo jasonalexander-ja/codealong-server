@@ -24,5 +24,6 @@ pub struct FileChanged {
 pub enum UserActivity {
     DirUpdated(DirectoryUpdated),
     RequestLineEdit(RequestLineEdit),
-    FileChanged(FileChanged)
+    FileChanged(FileChanged),
+    RequestSync
 }

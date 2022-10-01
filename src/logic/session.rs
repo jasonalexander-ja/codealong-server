@@ -1,8 +1,7 @@
 use crate::{
     utils::settings::AppSettings,
     models::errors::CodealongError,
-    models::session::{SessionStore, Session},
-    models::user_activity::UserActivity,
+    models::{session::{SessionStore, Session, SessionMessage}, server_activity::ServerActivity},
     models::response::Count
 };
 use super::user as user_logic;
@@ -56,7 +55,7 @@ pub async fn make_new_session(
     settings: AppSettings, 
     sessions_str: SessionStore
 ) -> Result<impl Reply, CodealongError> {
-    let (tx, rx) = mpsc::unbounded_channel::<UserActivity>();
+    let (tx, rx) = mpsc::unbounded_channel::<SessionMessage>();
 
     let (session_id, user_id) = match check_add_session(settings.max_sessions, 
         user_name, 
@@ -78,11 +77,11 @@ async fn check_add_session(
     max_sessions: usize,
     user_name: String,
     sessions_str: &SessionStore,
-    tx: UnboundedSender<UserActivity>
+    tx: UnboundedSender<SessionMessage>
 ) -> Result<(String, String), CodealongError> {
     let mut sessions = sessions_str.write().await;
 
-    if sessions.len() <= max_sessions {
+    if sessions.len() >= max_sessions {
         return Err(CodealongError::MaxCapacity)
     }
 
@@ -91,4 +90,23 @@ async fn check_add_session(
     let session = Session::new(user_name, user_id.clone(), tx);
     sessions.insert(session_id.clone(), session);
     Ok((session_id, user_id))
+}
+
+pub async fn stream_out_session(user_id: &String, sess_id: &String, sessions: &SessionStore) {
+    let sessions = sessions.read().await;
+    let session = match sessions.get(sess_id) {
+        Some(val) => val,
+        None => return
+    };
+    let users = session.users.read().await;
+    let _user = match users.get(user_id) {
+        Some(v) => v,
+        None => return 
+    };
+    let _project_dir = session.rootdir.spool_to_dto().await;
+    let server_act = ServerActivity::CurrentProject(_project_dir);
+    let new_msg = SessionMessage::ServerActivity(server_act);
+    if let Err(_err) = _user.sender.send(new_msg) {
+
+    };
 }
