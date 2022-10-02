@@ -1,7 +1,11 @@
 use crate::{
     utils::settings::AppSettings,
     models::errors::CodealongError,
-    models::{session::{SessionStore, Session, SessionMessage}, server_activity::ServerActivity},
+    models::{
+        session::{SessionStore, Session, SessionMessage}, 
+        server_activity::ServerActivity,
+        user_activity::DirectoryUpdated
+    },
     models::response::Count
 };
 use super::user as user_logic;
@@ -109,4 +113,29 @@ pub async fn stream_out_session(user_id: &String, sess_id: &String, sessions: &S
     if let Err(_err) = _user.sender.send(new_msg) {
 
     };
+}
+
+pub async fn directory_changed(
+    dir: DirectoryUpdated, 
+    user_id: &String, 
+    sess_id: &String, 
+    sessions: &SessionStore
+) {
+    
+}
+
+async fn create_file(path: Vec<String>) {
+
+}
+
+async fn deleted_file(path: Vec<String>) {
+    
+}
+
+async fn create_dir(path: Vec<String>) {
+    
+}
+
+async fn delete_dir(path: Vec<String>) {
+    
 }

@@ -1,29 +1,29 @@
 use crate::{
-    models::session::SessionStore,
-    models::session::Session,
-    models::session::UserState,
-    models::session::SessionMessage,
-    models::user_activity::UserActivity,
-    models::errors::CodealongError,
+    models::{
+        session::SessionStore,
+        session::Session,
+        session::UserState,
+        session::SessionMessage,
+        user_activity::UserActivity,
+        errors::CodealongError
+    },
     utils::settings::AppSettings
 };
 
 use super::session as session_logic;
+use super::directory as dir_logic;
 
 use warp::filters::ws;
 use warp::reply::Reply;
 use warp::ws::Message;
 
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use futures::{SinkExt, TryFutureExt};
-use futures_util::StreamExt;
-use futures_util::stream::SplitSink;
+use futures_util::{StreamExt, stream::SplitSink};
 
-use serde_json::to_string as to_json_string;
-use serde_json::from_str;
+use serde_json::{to_string as to_json_string, from_str};
 
 use uuid::Uuid;
 
@@ -119,6 +119,8 @@ async fn process_user_response(user_id: String, sess_id: String, msg: Message, s
     match msg {
         UserActivity::RequestSync => 
             session_logic::stream_out_session(&user_id, &sess_id, sessions).await,
+        UserActivity::DirUpdated(update) => 
+            dir_logic::directory_changed(&sess_id, update, sessions).await,
         _ => ()
     };
 }
