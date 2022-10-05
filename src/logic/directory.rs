@@ -39,7 +39,7 @@ async fn create_file(
         let mut files = dir.files.write().await;
         let file = vec![RwLock::new("".to_owned())];
         files.insert(filename.clone(), file);
-        ()
+        Ok::<(), ()>(())
     }.boxed()).await;
 }
 

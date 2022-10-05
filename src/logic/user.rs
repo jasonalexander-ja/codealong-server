@@ -3,7 +3,7 @@ use crate::{
         session::SessionStore,
         session::Session,
         session::UserState,
-        session::SessionMessage,
+        session_activity::SessionActivity,
         user_activity::UserActivity,
         errors::CodealongError
     },
@@ -35,7 +35,7 @@ pub async fn new_user(
     settings: AppSettings, 
     sessions_str: SessionStore
 ) -> Result<impl Reply, CodealongError> {
-    let (tx, rx) = mpsc::unbounded_channel::<SessionMessage>();
+    let (tx, rx) = mpsc::unbounded_channel::<SessionActivity>();
 
     let new_user = UserState::new(user_name, tx);
 
@@ -86,7 +86,7 @@ pub async fn user_thread(
     session_id: String,
     ws: ws::WebSocket,
     sessions: SessionStore,
-    user_rx: UnboundedReceiver<SessionMessage>
+    user_rx: UnboundedReceiver<SessionActivity>
 ) {
     let (user_ws_tx, mut user_ws_rx) = ws.split();
     let rx = UnboundedReceiverStream::new(user_rx);
@@ -141,7 +141,7 @@ async fn send_user_data(session: &Session, user_id: &String, msg: &UserActivity)
         if uid == user_id {
             continue;
         }
-        let sess_msg = SessionMessage::UserActivity(msg.clone());
+        let sess_msg = SessionActivity::UserActivity(msg.clone());
         if let Err(_err) = user.sender.send(sess_msg) {
             // The tx is disconected since the user thread has exited 
             // this will only happen when the user disconects 
@@ -151,7 +151,7 @@ async fn send_user_data(session: &Session, user_id: &String, msg: &UserActivity)
 }
 
 fn user_send_task(
-    rx: UnboundedReceiverStream<SessionMessage>,
+    rx: UnboundedReceiverStream<SessionActivity>,
     user_ws_tx: SplitSink<ws::WebSocket, Message>
 ) {
     let mut rx = rx;

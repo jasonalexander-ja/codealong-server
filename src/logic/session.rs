@@ -2,7 +2,8 @@ use crate::{
     utils::settings::AppSettings,
     models::errors::CodealongError,
     models::{
-        session::{SessionStore, Session, SessionMessage}, 
+        session::{SessionStore, Session},
+        session_activity::SessionActivity,
         server_activity::ServerActivity
     },
     models::response::Count
@@ -58,7 +59,7 @@ pub async fn make_new_session(
     settings: AppSettings, 
     sessions_str: SessionStore
 ) -> Result<impl Reply, CodealongError> {
-    let (tx, rx) = mpsc::unbounded_channel::<SessionMessage>();
+    let (tx, rx) = mpsc::unbounded_channel::<SessionActivity>();
 
     let (session_id, user_id) = match check_add_session(settings.max_sessions, 
         user_name, 
@@ -80,7 +81,7 @@ async fn check_add_session(
     max_sessions: usize,
     user_name: String,
     sessions_str: &SessionStore,
-    tx: UnboundedSender<SessionMessage>
+    tx: UnboundedSender<SessionActivity>
 ) -> Result<(String, String), CodealongError> {
     let mut sessions = sessions_str.write().await;
 
@@ -108,7 +109,7 @@ pub async fn stream_out_session(user_id: &String, sess_id: &String, sessions: &S
     };
     let _project_dir = session.rootdir.spool_to_dto().await;
     let server_act = ServerActivity::CurrentProject(_project_dir);
-    let new_msg = SessionMessage::ServerActivity(server_act);
+    let new_msg = SessionActivity::ServerActivity(server_act);
     if let Err(_err) = _user.sender.send(new_msg) {
 
     };

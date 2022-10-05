@@ -1,4 +1,4 @@
-use super::session::DirectoryDTO;
+use super::directory::DirectoryDTO;
 
 use serde::{Serialize, Deserialize};
 
