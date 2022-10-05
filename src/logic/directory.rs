@@ -1,3 +1,6 @@
+use futures::FutureExt;
+use tokio::sync::RwLock;
+
 use crate::{
     models::{
         user_activity::DirectoryUpdated,
@@ -24,29 +27,42 @@ async fn create_file(
     path: Vec<String>,
     sessions: &SessionStore
 ) {
-
+    if path.len() == 0 {
+        return;
+    }
+    let sessions = sessions.read().await;
+    let session = match sessions.get(sess_id) {
+        Some(s) => s,
+        _ => return
+    };
+    session.rootdir.modify_dir(&path, 0, |filename, dir| async move {
+        let mut files = dir.files.write().await;
+        let file = vec![RwLock::new("".to_owned())];
+        files.insert(filename.clone(), file);
+        ()
+    }.boxed()).await;
 }
 
 async fn deleted_file(
-    sess_id: &String,  
-    path: Vec<String>,
-    sessions: &SessionStore
+    _sess_id: &String,  
+    _path: Vec<String>,
+    _sessions: &SessionStore
 ) {
     
 }
 
 async fn create_dir(
-    sess_id: &String,  
-    path: Vec<String>,
-    sessions: &SessionStore
+    _sess_id: &String,  
+    _path: Vec<String>,
+    _sessions: &SessionStore
 ) {
     
 }
 
 async fn delete_dir(
-    sess_id: &String,  
-    path: Vec<String>,
-    sessions: &SessionStore
+    _sess_id: &String,  
+    _path: Vec<String>,
+    _sessions: &SessionStore
 ) {
     
 }

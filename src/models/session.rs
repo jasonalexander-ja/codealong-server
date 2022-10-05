@@ -12,6 +12,9 @@ use futures::future::join_all;
 
 use async_recursion::async_recursion;
 
+use ::futures::future::BoxFuture;
+
+
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SessionMessage {
@@ -28,6 +31,34 @@ pub struct Directory {
 }
 
 impl Directory {
+    #[async_recursion]
+    pub async fn modify_dir<'a, F, R>(
+        &'a self, 
+        path: &'a [String], 
+        level: usize,
+        closure: F
+    ) -> Option<R> 
+    where 
+        F: Fn(String, &Directory) -> BoxFuture<'_, R> + std::marker::Send + 'async_recursion 
+    {
+        let dirname = if let Some(val) = path.get(level) {
+            val
+        } else { return None };
+
+        if level + 1 >= path.len() {
+            let file_dir_name = dirname.clone();
+            let fut = closure(file_dir_name, self);
+            let res = fut.await;
+            return Some(res)
+        }
+        let subdirs = self.subdirs.read().await;
+        let directory = match subdirs.get(dirname) {
+            Some(d) => d,
+            _ => return None
+        };
+        directory.modify_dir(path, level + 1, closure).await
+    }
+
     pub fn new_with_file() -> Self {
         let file = vec![
             RwLock::new("Welcome to codealong".to_owned()),
