@@ -4,7 +4,8 @@ use tokio::sync::RwLock;
 use crate::{
     models::{
         user_activity::DirectoryUpdated,
-        session::SessionStore
+        session::SessionStore,
+        directory::DirError
     }
 };
 
@@ -35,11 +36,14 @@ async fn create_file(
         Some(s) => s,
         _ => return
     };
-    session.rootdir.modify_dir(&path, 0, |filename, dir| async move {
+    let _res = session.rootdir.transverse_blocking(&path, 0, |filename, dir| async move {
         let mut files = dir.files.write().await;
         let file = vec![RwLock::new("".to_owned())];
+        if files.contains_key(&filename) {
+            return Err(DirError::NameClash)
+        }
         files.insert(filename.clone(), file);
-        Ok::<(), ()>(())
+        Ok::<(), DirError>(())
     }.boxed()).await;
 }
 

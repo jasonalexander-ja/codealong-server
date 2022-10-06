@@ -10,6 +10,13 @@ use futures::future::join_all;
 use futures::future::BoxFuture;
 
 
+#[derive(Clone, Serialize, Deserialize)]
+pub enum DirError {
+    Locked(String),
+    NotFound(String),
+    DepthOutOfRange,
+    NameClash
+}
 
 pub type File = Vec<RwLock<String>>;
 
@@ -20,8 +27,41 @@ pub struct Directory {
 }
 
 impl Directory {
+
+    #[allow(dead_code)]
     #[async_recursion]
-    pub async fn modify_dir<F, R>(
+    pub async fn transverse<F, R>(
+        &self, 
+        path: &[String], 
+        level: usize,
+        closure: F
+    ) -> Result<R, DirError> 
+    where 
+        F: Fn(String, &Directory) -> BoxFuture<'_, R> + std::marker::Send + 'async_recursion 
+    {
+        let dirname = if let Some(val) = path.get(level) {
+            val
+        } else { return Err(DirError::DepthOutOfRange) };
+
+        if level + 1 >= path.len() {
+            let file_dir_name = dirname.clone();
+            let fut = closure(file_dir_name, self);
+            let res = fut.await;
+            return Ok(res)
+        }
+        let subdirs = match self.subdirs.try_read() {
+            Ok(v) => v,
+            _ => return Err(DirError::Locked(dirname.clone()))
+        };
+        let directory = match subdirs.get(dirname) {
+            Some(d) => d,
+            _ => return Err(DirError::NotFound(dirname.clone()))
+        };
+        directory.transverse(path, level + 1, closure).await
+    }
+
+    #[async_recursion]
+    pub async fn transverse_blocking<F, R>(
         &self, 
         path: &[String], 
         level: usize,
@@ -45,7 +85,7 @@ impl Directory {
             Some(d) => d,
             _ => return None
         };
-        directory.modify_dir(path, level + 1, closure).await
+        directory.transverse_blocking(path, level + 1, closure).await
     }
 
     pub fn new_with_file() -> Self {
