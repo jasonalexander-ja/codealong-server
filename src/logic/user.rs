@@ -120,7 +120,7 @@ async fn process_user_response(user_id: String, sess_id: String, msg: Message, s
         UserActivity::RequestSync => 
             session_logic::stream_out_session(&user_id, &sess_id, sessions).await,
         UserActivity::DirUpdated(update) => 
-            dir_logic::directory_changed(&sess_id, update, sessions).await,
+            dir_logic::directory_changed(&user_id, &sess_id, update, sessions).await,
         _ => ()
     };
 }
@@ -167,4 +167,19 @@ fn user_send_task(
             }
         }
     });
+}
+
+pub async fn send_sess_update(
+    user_id: &String, 
+    session: &Session,
+    msg: SessionActivity
+) {
+    let users = session.users.read().await;
+    let user = match users.get(user_id) {
+        Some(v) => v,
+        None => return 
+    };
+    if let Err(_err) = user.sender.send(msg) { 
+        // Use has disconected, user logic wll handle it 
+    };
 }

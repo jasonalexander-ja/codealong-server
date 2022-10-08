@@ -4,8 +4,17 @@ use serde::{Serialize, Deserialize};
 pub enum DirectoryUpdated {
     ErasedDir(Vec<String>),
     CreatedDir(Vec<String>),
+    RenameDir(RenameItem),
+
     CreatedFile(Vec<String>),
     ErasedFile(Vec<String>),
+    RenameFile(RenameItem)
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RenameItem {
+    pub path: Vec<String>,
+    pub name: String
 }
 
 #[derive(Serialize, Deserialize, Clone)]

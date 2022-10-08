@@ -102,15 +102,9 @@ pub async fn stream_out_session(user_id: &String, sess_id: &String, sessions: &S
         Some(val) => val,
         None => return
     };
-    let users = session.users.read().await;
-    let _user = match users.get(user_id) {
-        Some(v) => v,
-        None => return 
-    };
-    let _project_dir = session.rootdir.spool_to_dto().await;
-    let server_act = ServerActivity::CurrentProject(_project_dir);
+    
+    let project_dir = session.rootdir.spool_to_dto().await;
+    let server_act = ServerActivity::CurrentProject(project_dir);
     let new_msg = SessionActivity::ServerActivity(server_act);
-    if let Err(_err) = _user.sender.send(new_msg) {
-
-    };
+    user_logic::send_sess_update(user_id, session, new_msg).await;
 }
