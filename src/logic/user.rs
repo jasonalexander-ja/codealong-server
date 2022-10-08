@@ -1,8 +1,10 @@
 use crate::{
     models::{
-        session::SessionStore,
-        session::Session,
-        session::UserState,
+        session::{
+            SessionStore,
+            Session,
+            UserState
+        },
         session_activity::SessionActivity,
         user_activity::UserActivity,
         errors::CodealongError

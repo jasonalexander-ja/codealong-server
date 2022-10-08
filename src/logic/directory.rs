@@ -3,12 +3,22 @@ use tokio::sync::RwLock;
 
 use crate::{
     models::{
-        user_activity::DirectoryUpdated,
-        session::{SessionStore, Session, UserState},
-        directory::{DirError, DirResponse, Directory}, 
+        user_activity::{
+            DirectoryUpdated, 
+            RenameItem
+        },
+        session::{
+            SessionStore, 
+            Session, 
+            UserState
+        },
+        directory::{
+            DirError, 
+            DirResponse, 
+            Directory
+        }, 
         session_activity::SessionActivity, 
         server_activity::ServerActivity,
-        user_activity::RenameItem
     }
 };
 
