@@ -1,5 +1,3 @@
-use super::user_activity::RenameItem;
-
 use std::collections::HashMap;
 
 use tokio::sync::RwLock;
@@ -27,13 +25,19 @@ pub enum DirError {
 
 /// Serialisable responses to directory operations. 
 #[derive(Clone, Serialize, Deserialize)]
-pub enum DirResponse {
-    /// Created a file/directory with a given name. 
-    Created(String),
-    /// Deleted a file/directory with a given name.
-    Deleted(String),
-    /// Renamed file/directory. 
-    Renamed(RenameItem)
+pub enum DirectoryUpdated {
+    ErasedDir(Vec<String>),
+    CreatedDir(Vec<String>),
+    RenameDir(RenameItem),
+    CreatedFile(Vec<String>),
+    ErasedFile(Vec<String>),
+    RenameFile(RenameItem)
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RenameItem {
+    pub path: Vec<String>,
+    pub name: String
 }
 
 /// Types representing a file, where each lines is a new entry 

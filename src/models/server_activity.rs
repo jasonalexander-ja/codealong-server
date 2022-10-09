@@ -1,5 +1,5 @@
 use super::directory::DirectoryDTO;
-use super::directory::{DirError, DirResponse};
+use super::directory::{DirError, DirectoryUpdated};
 
 use serde::{Serialize, Deserialize};
 
@@ -8,5 +8,13 @@ use serde::{Serialize, Deserialize};
 pub enum ServerActivity {
     CurrentProject(DirectoryDTO),
     DirectoryErr(DirError),
-    DirectoryUpdate(DirResponse)
+    DirectoryUpdate(DirectoryUpdated)
+}
+
+#[allow(dead_code)]
+pub enum SendTo {
+    ToSameUser(ServerActivity),
+    ToOtherUsers(ServerActivity),
+    ToAllUsers(ServerActivity),
+    None
 }

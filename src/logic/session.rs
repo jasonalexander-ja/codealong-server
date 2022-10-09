@@ -6,7 +6,7 @@ use crate::{
         session_activity::SessionActivity,
         server_activity::ServerActivity
     },
-    models::response::Count
+    models::{response::Count, server_activity::SendTo}
 };
 use super::user as user_logic;
 
@@ -96,15 +96,17 @@ async fn check_add_session(
     Ok((session_id, user_id))
 }
 
-pub async fn stream_out_session(user_id: &String, sess_id: &String, sessions: &SessionStore) {
+pub async fn stream_out_session(
+    sess_id: &String, 
+    sessions: &SessionStore
+) -> SendTo {
     let sessions = sessions.read().await;
     let session = match sessions.get(sess_id) {
         Some(val) => val,
-        None => return
+        None => return SendTo::None
     };
     
     let project_dir = session.rootdir.spool_to_dto().await;
     let server_act = ServerActivity::CurrentProject(project_dir);
-    let new_msg = SessionActivity::ServerActivity(server_act);
-    user_logic::send_sess_update(user_id, session, new_msg).await;
+    SendTo::ToSameUser(server_act)
 }

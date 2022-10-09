@@ -7,7 +7,7 @@ use crate::{
         },
         session_activity::SessionActivity,
         user_activity::UserActivity,
-        errors::CodealongError
+        errors::CodealongError, server_activity::SendTo
     },
     utils::settings::AppSettings
 };
@@ -118,12 +118,12 @@ async fn process_user_response(user_id: String, sess_id: String, msg: Message, s
     };
     send_user_data(session, &user_id, &msg).await;
 
-    match msg {
+    let _response = match msg {
         UserActivity::RequestSync => 
-            session_logic::stream_out_session(&user_id, &sess_id, sessions).await,
+            session_logic::stream_out_session(&sess_id, sessions).await,
         UserActivity::DirUpdated(update) => 
-            dir_logic::directory_changed(&user_id, &sess_id, update, sessions).await,
-        _ => ()
+            dir_logic::directory_changed(&sess_id, update, sessions).await,
+        _ => SendTo::None
     };
 }
 
@@ -169,19 +169,4 @@ fn user_send_task(
             }
         }
     });
-}
-
-pub async fn send_sess_update(
-    user_id: &String, 
-    session: &Session,
-    msg: SessionActivity
-) {
-    let users = session.users.read().await;
-    let user = match users.get(user_id) {
-        Some(v) => v,
-        None => return 
-    };
-    if let Err(_err) = user.sender.send(msg) { 
-        // Use has disconected, user logic wll handle it 
-    };
 }
