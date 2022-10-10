@@ -7,7 +7,8 @@ use crate::{
         },
         session_activity::SessionActivity,
         user_activity::UserActivity,
-        errors::CodealongError, server_activity::SendTo
+        errors::CodealongError, 
+        session_activity::SendTo
     },
     utils::settings::AppSettings
 };
@@ -102,11 +103,11 @@ pub async fn user_thread(
                 break;
             }
         };
-        process_user_response(user_id.clone(), session_id.clone(), msg, &sessions).await;
+        process_user_resquest(user_id.clone(), session_id.clone(), msg, &sessions).await;
     }
 }
 
-async fn process_user_response(user_id: String, sess_id: String, msg: Message, sessions: &SessionStore) {
+async fn process_user_resquest(user_id: String, sess_id: String, msg: Message, sessions: &SessionStore) {
     let msg = match extract_message(&msg) {
         Some(val) => val,
         _ => return
@@ -116,15 +117,59 @@ async fn process_user_response(user_id: String, sess_id: String, msg: Message, s
         Some(val) => val,
         _ => return
     };
-    send_user_data(session, &user_id, &msg).await;
 
-    let _response = match msg {
+    let res = match msg {
         UserActivity::RequestSync => 
-            session_logic::stream_out_session(&sess_id, sessions).await,
+            session_logic::stream_out_session(session).await,
         UserActivity::DirUpdated(update) => 
-            dir_logic::directory_changed(&sess_id, update, sessions).await,
+            dir_logic::directory_changed(update, session).await,
         _ => SendTo::None
     };
+    send_response(&user_id, &res, session).await;
+}
+
+async fn send_response(user_id: &String, res: &SendTo, session: &Session) {
+    match res {
+        SendTo::None => (),
+        SendTo::ToAllUsers(v) => send_all_users(v, session).await,
+        SendTo::ToOtherUsers(v) => send_other_users(user_id, v, session).await,
+        SendTo::ToSameUser(v) => send_same_users(user_id, v, session).await
+    };
+}
+
+async fn send_all_users(act: &SessionActivity, session: &Session) {
+    let users = session.users.read().await;
+    for (_, user) in users.iter() {
+        if let Err(_) = user.sender.send(act.clone()) {
+            // User has disconected, user logout code will run 
+        }
+    }
+}
+
+async fn send_other_users(user_id: &String, act: &SessionActivity, session: &Session) {
+    let users = session.users.read().await;
+    for (id, user) in users.iter() {
+        if id == user_id {
+            continue;
+        }
+        if let Err(_) = user.sender.send(act.clone()) {
+            // User has disconected, user logout code will run 
+        }
+    }
+}
+
+async fn send_same_users(user_id: &String, act: &SessionActivity, session: &Session) {
+    let users = session.users.read().await;
+    for (id, user) in users.iter() {
+        if id != user_id {
+            continue;
+        }
+        if let Err(_) = user.sender.send(act.clone()) {
+            // User has disconected, user logout code will run 
+        } else {
+            return
+        }
+    }
 }
 
 fn extract_message(msg: &Message) -> Option<UserActivity> {

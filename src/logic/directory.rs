@@ -13,26 +13,22 @@ use crate::{
             Directory,
             RenameItem
         }, 
-        server_activity::{ServerActivity, SendTo},
+        server_activity::ServerActivity,
+        session_activity::{SendTo, SessionActivity}
     }
 };
 
 
 pub async fn directory_changed(
-    sess_id: &String, 
     dir: DirectoryUpdated, 
-    sessions: &SessionStore
+    session: &Session
 ) -> SendTo {
-    let sessions = sessions.read().await;
-    let session = match sessions.get(sess_id) {
-        Some(s) => s,
-        _ => return SendTo::None
-    };
     let server_act = match inner(session, dir).await {
         Ok(v) => ServerActivity::DirectoryUpdate(v),
         Err(v) => ServerActivity::DirectoryErr(v)
     };
-    SendTo::ToOtherUsers(server_act)
+    let sess_act = SessionActivity::ServerActivity(server_act);
+    SendTo::ToOtherUsers(sess_act)
 }
 
 

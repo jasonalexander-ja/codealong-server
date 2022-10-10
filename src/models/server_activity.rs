@@ -10,11 +10,3 @@ pub enum ServerActivity {
     DirectoryErr(DirError),
     DirectoryUpdate(DirectoryUpdated)
 }
-
-#[allow(dead_code)]
-pub enum SendTo {
-    ToSameUser(ServerActivity),
-    ToOtherUsers(ServerActivity),
-    ToAllUsers(ServerActivity),
-    None
-}
