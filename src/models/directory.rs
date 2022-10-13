@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use super::user_activity;
+
 use tokio::sync::RwLock;
 
 use serde::{Serialize, Deserialize};
@@ -20,7 +22,8 @@ pub enum DirError {
     /// A given path indexer is out of range for a given path. 
     DepthOutOfRange,
     /// A file or directory of a name already exists. 
-    NameClash
+    NameClash,
+    LineLocked(user_activity::LockLine)
 }
 
 /// Serialisable responses to directory operations. 

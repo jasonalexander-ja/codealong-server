@@ -10,8 +10,16 @@ pub struct FileChanged {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct LockLine {
+    pub filepath: Vec<String>,
+    pub line: usize
+}
+
+
+#[derive(Serialize, Deserialize, Clone)]
 pub enum UserActivity {
     DirUpdated(DirectoryUpdated),
     FileChanged(FileChanged),
+    LockLine(LockLine),
     RequestSync
 }

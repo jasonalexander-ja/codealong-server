@@ -15,15 +15,16 @@ use crate::{
 
 use super::session as session_logic;
 use super::directory as dir_logic;
+use super::file as file_logic;
 
-use warp::filters::ws;
+use warp::{filters::ws, ws::WebSocket};
 use warp::reply::Reply;
 use warp::ws::Message;
 
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use futures::{SinkExt, TryFutureExt};
+use futures::{SinkExt, TryFutureExt, stream::SplitStream};
 use futures_util::{StreamExt, stream::SplitSink};
 
 use serde_json::{to_string as to_json_string, from_str};
@@ -96,18 +97,35 @@ pub async fn user_thread(
 
     user_send_task(rx, user_ws_tx);
 
-    while let Some(result) = user_ws_rx.next().await {
-        let msg = match result {
-            Ok(msg) => msg,
-            Err(_e) => {
-                break;
-            }
+    loop {
+        let msg = match next_response(&mut user_ws_rx).await {
+            Some(v) => v,
+            None => break
         };
-        process_user_resquest(user_id.clone(), session_id.clone(), msg, &sessions).await;
+        process_user_resquest(
+            user_id.clone(), 
+            session_id.clone(), 
+            msg, 
+            &sessions,
+            &mut user_ws_rx
+        ).await
     }
 }
 
-async fn process_user_resquest(user_id: String, sess_id: String, msg: Message, sessions: &SessionStore) {
+async fn next_response(user_ws_rx: &mut SplitStream<WebSocket>) -> Option<Message> {
+    let msg = if let Some(m) = user_ws_rx.next().await { m }
+    else { return None; };
+    if let Ok(m) = msg { Some(m) }
+    else { None }
+}
+
+async fn process_user_resquest(
+    user_id: String, 
+    sess_id: String, 
+    msg: Message, 
+    sessions: &SessionStore,
+    socket: &mut SplitStream<WebSocket>
+) {
     let msg = match extract_message(&msg) {
         Some(val) => val,
         _ => return
@@ -123,9 +141,22 @@ async fn process_user_resquest(user_id: String, sess_id: String, msg: Message, s
             session_logic::stream_out_session(session).await,
         UserActivity::DirUpdated(update) => 
             dir_logic::directory_changed(update, session).await,
+        UserActivity::LockLine(lock) =>
+            file_logic::lock_line(lock, session, socket).await,
         _ => SendTo::None
     };
     send_response(&user_id, &res, session).await;
+}
+
+fn extract_message(msg: &Message) -> Option<UserActivity> {
+    let msg_text = match msg.to_str() {
+        Ok(v) => v,
+        Err(_) => return None
+    };
+    match from_str::<UserActivity>(msg_text) {
+        Ok(v) => Some(v),
+        Err(_) => return None
+    }
 }
 
 async fn send_response(user_id: &String, res: &SendTo, session: &Session) {
@@ -149,9 +180,7 @@ async fn send_all_users(act: &SessionActivity, session: &Session) {
 async fn send_other_users(user_id: &String, act: &SessionActivity, session: &Session) {
     let users = session.users.read().await;
     for (id, user) in users.iter() {
-        if id == user_id {
-            continue;
-        }
+        if id == user_id { continue; }
         if let Err(_) = user.sender.send(act.clone()) {
             // User has disconected, user logout code will run 
         }
@@ -160,40 +189,10 @@ async fn send_other_users(user_id: &String, act: &SessionActivity, session: &Ses
 
 async fn send_same_users(user_id: &String, act: &SessionActivity, session: &Session) {
     let users = session.users.read().await;
-    for (id, user) in users.iter() {
-        if id != user_id {
-            continue;
-        }
+    if let Some(user) = users.get(user_id) {
         if let Err(_) = user.sender.send(act.clone()) {
             // User has disconected, user logout code will run 
-        } else {
-            return
         }
-    }
-}
-
-fn extract_message(msg: &Message) -> Option<UserActivity> {
-    let msg_text = match msg.to_str() {
-        Ok(v) => v,
-        Err(_) => return None
-    };
-    match from_str::<UserActivity>(msg_text) {
-        Ok(v) => Some(v),
-        Err(_) => return None
-    }
-}
-
-async fn send_user_data(session: &Session, user_id: &String, msg: &UserActivity) {
-    for (uid, user) in session.users.read().await.iter() {
-        if uid == user_id {
-            continue;
-        }
-        let sess_msg = SessionActivity::UserActivity(msg.clone());
-        if let Err(_err) = user.sender.send(sess_msg) {
-            // The tx is disconected since the user thread has exited 
-            // this will only happen when the user disconects 
-            // which will be handled 
-        };
     }
 }
 

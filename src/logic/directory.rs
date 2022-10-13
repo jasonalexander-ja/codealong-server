@@ -1,10 +1,6 @@
-use futures::FutureExt;
-use tokio::sync::RwLock;
-
 use crate::{
     models::{
         session::{
-            SessionStore, 
             Session, 
         },
         directory::{
@@ -18,19 +14,32 @@ use crate::{
     }
 };
 
+use futures::FutureExt;
+
+use tokio::sync::RwLock;
+
 
 pub async fn directory_changed(
     dir: DirectoryUpdated, 
     session: &Session
 ) -> SendTo {
-    let server_act = match inner(session, dir).await {
-        Ok(v) => ServerActivity::DirectoryUpdate(v),
-        Err(v) => ServerActivity::DirectoryErr(v)
-    };
-    let sess_act = SessionActivity::ServerActivity(server_act);
+    match inner(session, dir).await {
+        Ok(v) => pack_sucess(v),
+        Err(v) => pack_errors(v)
+    }
+}
+
+fn pack_sucess(v: DirectoryUpdated) -> SendTo {
+    let v = ServerActivity::DirectoryUpdate(v);
+    let sess_act = SessionActivity::ServerActivity(v);
     SendTo::ToOtherUsers(sess_act)
 }
 
+fn pack_errors(v: DirError) -> SendTo {
+    let v = ServerActivity::DirectoryErr(v);
+    let sess_act = SessionActivity::ServerActivity(v);
+    SendTo::ToSameUser(sess_act)
+}
 
 pub async fn inner(
     session: &Session, 
