@@ -15,6 +15,14 @@ pub struct LockLine {
     pub line: usize
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct LineLocked {
+    pub filepath: Vec<String>,
+    pub line: usize,
+    pub line_edit_id: String,
+    pub user_id: String
+}
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum UserActivity {

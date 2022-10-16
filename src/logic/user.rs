@@ -106,8 +106,7 @@ pub async fn user_thread(
             user_id.clone(), 
             session_id.clone(), 
             msg, 
-            &sessions,
-            &mut user_ws_rx
+            &sessions
         ).await
     }
 }
@@ -123,8 +122,7 @@ async fn process_user_resquest(
     user_id: String, 
     sess_id: String, 
     msg: Message, 
-    sessions: &SessionStore,
-    socket: &mut SplitStream<WebSocket>
+    sessions: &SessionStore
 ) {
     let msg = match extract_message(&msg) {
         Some(val) => val,
@@ -142,7 +140,7 @@ async fn process_user_resquest(
         UserActivity::DirUpdated(update) => 
             dir_logic::directory_changed(update, session).await,
         UserActivity::LockLine(lock) =>
-            file_logic::lock_line(lock, session, socket).await,
+            file_logic::lock_line(&user_id, lock, session).await,
         _ => SendTo::None
     };
     send_response(&user_id, &res, session).await;

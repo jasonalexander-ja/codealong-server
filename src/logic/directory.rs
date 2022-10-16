@@ -7,7 +7,8 @@ use crate::{
             DirError, 
             DirectoryUpdated, 
             Directory,
-            RenameItem
+            RenameItem,
+            FileLine
         }, 
         server_activity::ServerActivity,
         session_activity::{SendTo, SessionActivity}
@@ -66,11 +67,11 @@ async fn create_file(
     let path_cpy = path.iter().map(|val| val.clone()).collect();
     session.rootdir.transverse_blocking(&path, 0, |filename, dir| async move {
         let mut files = dir.files.write().await;
-        let file = vec![RwLock::new("".to_owned())];
+        let file = vec![RwLock::new(FileLine::default())];
         if files.contains_key(&filename) {
             return Err(DirError::NameClash)
         }
-        files.insert(filename.clone(), file);
+        files.insert(filename.clone(), RwLock::new(file));
         Ok(DirectoryUpdated::CreatedFile(path_cpy))
     }.boxed()).await?
 }

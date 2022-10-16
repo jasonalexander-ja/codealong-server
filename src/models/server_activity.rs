@@ -1,5 +1,7 @@
 use super::directory::DirectoryDTO;
 use super::directory::{DirError, DirectoryUpdated};
+use super::session_activity::SessionActivity;
+use super::directory::FileLine;
 
 use serde::{Serialize, Deserialize};
 
@@ -8,5 +10,12 @@ use serde::{Serialize, Deserialize};
 pub enum ServerActivity {
     CurrentProject(DirectoryDTO),
     DirectoryErr(DirError),
-    DirectoryUpdate(DirectoryUpdated)
+    DirectoryUpdate(DirectoryUpdated),
+    LineLocked(FileLine)
+}
+
+impl ServerActivity {
+    pub fn wrap_to_session(self) -> SessionActivity {
+        SessionActivity::ServerActivity(self)
+    }
 }
