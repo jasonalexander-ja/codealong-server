@@ -1,7 +1,7 @@
 use super::directory::DirectoryDTO;
 use super::directory::{DirError, DirectoryUpdated};
 use super::session_activity::SessionActivity;
-use super::directory::FileLine;
+use super::file::FileLine;
 
 use serde::{Serialize, Deserialize};
 

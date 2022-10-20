@@ -4,14 +4,11 @@ use crate::{
         session_activity::{SendTo, SessionActivity},
         session::Session, 
         server_activity::ServerActivity, 
-        directory::{DirError, FileLine, Directory}
+        directory::{DirError, Directory}, file::FileLine
     }
 };
 
 use futures::FutureExt;
-
-use uuid::Uuid;
-
 
 
 pub async fn lock_line(
@@ -19,34 +16,25 @@ pub async fn lock_line(
     line_lock: LockLine, 
     session: &Session
 ) -> SendTo {
+    let user_id = user_id.clone();
     let res = session.rootdir.transverse_blocking(&line_lock.filepath.clone(), 0,
-        |f, d| async move { set_line_locked(f, d, line_lock).await }.boxed()).await;
-
-    let users = session.users.read().await;
-    let user = match users.get(user_id) {
-        Some(u) => u,
-        None => return SendTo::None
-    };
-
-    //user.sender.send(message)
+        |f, d| async move { set_line_locked(f, user_id, d, line_lock).await }.boxed()).await;
 
     handle_response(res)
 }
 
-fn handle_response(res: Result<Result<(), DirError>, DirError>) -> SendTo {
-    let sess_response = match res {
+fn handle_response(res: Result<Result<FileLine, DirError>, DirError>) -> SendTo {
+    let lock_response = match res {
         Ok(v) => v,
         Err(e) => return wrap_dir_err(e)
     };
-    match sess_response {
-        Ok(_) => (),
-        Err(e) => return wrap_dir_err(e)
-    };
-    if let Err(e) = sess_response {
-        return wrap_dir_err(e);
-    };
-
-    SendTo::None
+    match lock_response {
+        Ok(v) => {
+            let server = ServerActivity::LineLocked(v).wrap_to_session();
+            SendTo::ToAllUsers(server)
+        },
+        Err(e) => wrap_dir_err(e)
+    }
 }
 
 fn wrap_dir_err(e: DirError) -> SendTo {
@@ -57,9 +45,10 @@ fn wrap_dir_err(e: DirError) -> SendTo {
 
 async fn set_line_locked(
     filename: String, 
+    user_id: String,
     dir: &Directory, 
     line_lock: LockLine
-) -> Result<(), DirError> {
+) -> Result<FileLine, DirError> {
     let files = dir.files.read().await;
     let file = match files.get(&filename) {
         Some(f) => f,
@@ -74,7 +63,6 @@ async fn set_line_locked(
     if let Some(_) = line.locked {
         return Err(DirError::LineLocked(line_lock.clone()))
     }
-    let edit_id = Uuid::new_v4().to_string();
-    line.lock(&edit_id);
-    Ok::<(), DirError>(())
+    line.lock(&user_id);
+    Ok::<FileLine, DirError>(line.clone())
 }

@@ -24,7 +24,7 @@ use warp::ws::Message;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use futures::{SinkExt, TryFutureExt, stream::SplitStream};
+use futures::{SinkExt, TryFutureExt, stream::SplitStream, join};
 use futures_util::{StreamExt, stream::SplitSink};
 
 use serde_json::{to_string as to_json_string, from_str};
@@ -141,7 +141,7 @@ async fn process_user_resquest(
             dir_logic::directory_changed(update, session).await,
         UserActivity::LockLine(lock) =>
             file_logic::lock_line(&user_id, lock, session).await,
-        _ => SendTo::None
+        _ => SendTo::ToNone
     };
     send_response(&user_id, &res, session).await;
 }
@@ -159,10 +159,14 @@ fn extract_message(msg: &Message) -> Option<UserActivity> {
 
 async fn send_response(user_id: &String, res: &SendTo, session: &Session) {
     match res {
-        SendTo::None => (),
+        SendTo::ToNone => (),
         SendTo::ToAllUsers(v) => send_all_users(v, session).await,
         SendTo::ToOtherUsers(v) => send_other_users(user_id, v, session).await,
-        SendTo::ToSameUser(v) => send_same_users(user_id, v, session).await
+        SendTo::ToSameUser(v) => send_same_users(user_id, v, session).await,
+        SendTo::ToSplit(u, o) => {
+            join!(send_same_users(user_id, u, session),
+                send_other_users(user_id, o, session));
+        }
     };
 }
 

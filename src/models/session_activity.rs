@@ -15,5 +15,6 @@ pub enum SendTo {
     ToSameUser(SessionActivity),
     ToOtherUsers(SessionActivity),
     ToAllUsers(SessionActivity),
-    None
+    ToSplit(SessionActivity, SessionActivity),
+    ToNone
 }

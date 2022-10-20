@@ -7,17 +7,15 @@ use crate::{
             DirError, 
             DirectoryUpdated, 
             Directory,
-            RenameItem,
-            FileLine
+            RenameItem
         }, 
+        file::File,
         server_activity::ServerActivity,
         session_activity::{SendTo, SessionActivity}
     }
 };
 
 use futures::FutureExt;
-
-use tokio::sync::RwLock;
 
 
 pub async fn directory_changed(
@@ -67,11 +65,10 @@ async fn create_file(
     let path_cpy = path.iter().map(|val| val.clone()).collect();
     session.rootdir.transverse_blocking(&path, 0, |filename, dir| async move {
         let mut files = dir.files.write().await;
-        let file = vec![RwLock::new(FileLine::default())];
         if files.contains_key(&filename) {
             return Err(DirError::NameClash)
         }
-        files.insert(filename.clone(), RwLock::new(file));
+        files.insert(filename.clone(), File::default_with(""));
         Ok(DirectoryUpdated::CreatedFile(path_cpy))
     }.boxed()).await?
 }

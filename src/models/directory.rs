@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use super::{
+    file::File,
+    user_activity
+};
 
-use super::user_activity;
+use std::collections::HashMap;
 
 use tokio::sync::RwLock;
 
@@ -10,8 +13,6 @@ use async_recursion::async_recursion;
 
 use futures::future::join_all;
 use futures::future::BoxFuture;
-
-use uuid::Uuid;
 
 
 /// Possible errors when handling directory operations. 
@@ -44,45 +45,6 @@ pub struct RenameItem {
     pub path: Vec<String>,
     pub name: String
 }
-
-/// Denotes a line in a text file 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct FileLine {
-    /// The data on the line 
-    pub line: String,
-    /// The number of the line
-    /// If a line is locked to a user, the unique lock id will be stored 
-    pub locked: Option<String>
-}
-
-
-impl FileLine {
-    pub fn default_with(s: &str) -> Self {
-        FileLine {
-            line: s.to_owned(),
-            locked: None
-        }
-    }
-    pub fn get(&self) -> String {
-        self.line.clone()
-    }
-    pub fn lock(&mut self, lock_id: &String) {
-        self.locked = Some(lock_id.clone());
-    }
-    pub fn unlock(&mut self) {
-        self.locked = None;
-    }
-}
-
-impl Default for FileLine {
-    fn default() -> Self {
-        FileLine { line: "".to_owned(), locked: None }
-    }
-}
-
-/// Types representing a file, where each lines is a new entry 
-/// in a vector and each line is RW locked. 
-pub type File = RwLock<Vec<RwLock<FileLine>>>;
 
 /// Model of a directory that can store files and other 
 /// subdirectories. 
@@ -190,44 +152,12 @@ impl Directory {
         };
         directory.transverse_blocking(path, level + 1, closure).await
     }
-
-    #[async_recursion]
-    pub async fn transverse_blocking_params<F, P, R>(
-        &self, 
-        path: &[String], 
-        level: usize,
-        params: P,
-        closure: F
-    ) -> Result<R, DirError> 
-    where 
-        F: FnOnce(String, P, &Directory) -> BoxFuture<'_, R> + std::marker::Send + 'async_recursion, 
-        P: std::marker::Send
-    {
-        let dirname = if let Some(val) = path.get(level) {
-            val
-        } else { return Err(DirError::DepthOutOfRange) };
-
-        if level + 1 >= path.len() {
-            let file_dir_name = dirname.clone();
-            let fut = closure(file_dir_name, params, self);
-            let res = fut.await;
-            return Ok(res)
-        }
-        let subdirs = self.subdirs.read().await;
-        let directory = match subdirs.get(dirname) {
-            Some(d) => d,
-            _ => return Err(DirError::NotFound(dirname.clone()))
-        };
-        directory.transverse_blocking_params(path, level + 1, params, closure).await
-    }
     
     /// Creates a new directory with a "helloworld.txt" file. 
     pub fn new_with_file() -> Self {
-        let file = vec![
-            RwLock::new(FileLine::default_with("Welcome to codealong!")),
-        ];
+        let file = File::default_with("Welcome to codealong! ");
         let files = HashMap::from([
-            ("helloworld.txt".to_owned(), RwLock::new(file))
+            ("helloworld.txt".to_owned(), file)
         ]);
         
         Directory { 
@@ -316,12 +246,7 @@ impl Directory {
 
     pub async fn clone_file(key_vals: (&String, &File)) -> (String, File) {
         let (file_name, file) = key_vals;
-        let file_lines = file.read().await;
-        let line_futures = file_lines.iter().map(|line| async {
-            RwLock::new(line.read().await.clone())
-        });
-        let lines = join_all(line_futures).await;
-        (file_name.clone(), RwLock::new(lines))
+        (file_name.clone(), file.clone().await)
     }
 }
 
