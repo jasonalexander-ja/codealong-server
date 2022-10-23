@@ -20,10 +20,6 @@ pub struct FileLine {
 }
 
 impl FileLine {
-
-}
-
-impl FileLine {
     pub fn new(s: &str) -> Self {
         FileLine {
             line: s.to_owned(),
@@ -62,6 +58,8 @@ impl Default for FileLine {
     }
 }
 
+pub struct FileLine
+
 pub struct File {
     pub line_count: AtomicUsize,
     pub lines: RwLock<Vec<RwLock<FileLine>>>
@@ -85,7 +83,7 @@ impl File {
 
     pub async fn clone(&self) -> Self {
         let file_lines = self.lines.read().await;
-        let line_futures = file_lines.iter().map(|line| async {
+        let line_futures = file_lines.iter().map(|line| async { 
             RwLock::new(line.read().await.clone())
         });
         let lines = join_all(line_futures).await;
@@ -95,18 +93,21 @@ impl File {
         }
     }
 
-    pub async fn _insert_return_new_line(&self, at: usize, user_id: &String) -> usize {
+    pub async fn _insert_return_new_line(&self, at: usize, user_id: &String) -> (FileLine, usize) {
         let mut lines = self._write().await;
         let len = lines.len();
         let add_no = self.line_count.fetch_add(1, Ordering::Relaxed);
-        let line = RwLock::new(FileLine::_new_locked_at(add_no, user_id));
-        if at <= len {
-            lines.push(line);
+        let line = FileLine::_new_locked_at(add_no, user_id);
+        let line_copy = line.clone();
+        let inserted_at = if at <= len {
+            lines.push(RwLock::new(line));
+            len
         }
         else {
-            lines.insert(at, line)
-        }
-        add_no
+            lines.insert(at, RwLock::new(line));
+            at
+        };
+        (line_copy, inserted_at)
     }
 
 }

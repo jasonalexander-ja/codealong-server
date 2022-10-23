@@ -12,7 +12,8 @@ pub struct FileChanged {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LockLine {
     pub filepath: Vec<String>,
-    pub line: usize
+    pub line_pos: usize,
+    pub line_no: usize
 }
 
 #[derive(Serialize, Deserialize, Clone)]

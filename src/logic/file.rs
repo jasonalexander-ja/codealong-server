@@ -55,7 +55,7 @@ async fn set_line_locked(
         None => return Err(DirError::NotFound(filename))
     };
     let lines = file.read().await;
-    let line = match lines.get(line_lock.line) {
+    let line = match lines.get(line_lock.line_pos) {
         Some(v) => v,
         None => return Err(DirError::DepthOutOfRange)
     };
@@ -66,3 +66,28 @@ async fn set_line_locked(
     line.lock(&user_id);
     Ok::<FileLine, DirError>(line.clone())
 }
+
+
+pub async fn new_line(
+    at: usize,
+    user_id: &String,
+    line_lock: LockLine, 
+    session: &Session
+) -> SendTo {
+    let user_id = user_id.clone();
+    let res = session.rootdir.transverse_blocking(&line_lock.filepath.clone(), 0,
+        |f, d| async move { 
+            let files = d.files.read().await;
+            let file = match files.get(&user_id) {
+                Some(v) => v,
+                None => return Err(DirError::NotFound(f))
+            };
+            
+            let (new_line, _new_at) = file._insert_return_new_line(at, &user_id).await;
+            Ok(new_line)
+        }.boxed()
+    ).await;
+
+    handle_response(res)
+}
+

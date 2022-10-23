@@ -97,10 +97,19 @@ pub async fn user_thread(
 
     user_send_task(rx, user_ws_tx);
 
+    await_user_activity(user_id, session_id, sessions, &mut user_ws_rx).await;
+}
+
+async fn await_user_activity(
+    user_id: String,
+    session_id: String,
+    sessions: SessionStore,
+    user_ws_rx: &mut SplitStream<WebSocket>
+) {
     loop {
-        let msg = match next_response(&mut user_ws_rx).await {
+        let msg = match next_response(user_ws_rx).await {
             Some(v) => v,
-            None => break
+            None => break // User has disconected 
         };
         process_user_resquest(
             user_id.clone(), 
