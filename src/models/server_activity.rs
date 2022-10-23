@@ -1,7 +1,7 @@
 use super::directory::DirectoryDTO;
 use super::directory::{DirError, DirectoryUpdated};
 use super::session_activity::SessionActivity;
-use super::file::FileLine;
+use super::file::{FileLineLocked, FileLineAdded};
 
 use serde::{Serialize, Deserialize};
 
@@ -11,7 +11,8 @@ pub enum ServerActivity {
     CurrentProject(DirectoryDTO),
     DirectoryErr(DirError),
     DirectoryUpdate(DirectoryUpdated),
-    LineLocked(FileLine)
+    LineLocked(FileLineLocked),
+    LineAdded(FileLineAdded)
 }
 
 impl ServerActivity {

@@ -4,7 +4,7 @@ use crate::{
         session_activity::{SendTo, SessionActivity},
         session::Session, 
         server_activity::ServerActivity, 
-        directory::{DirError, Directory}, file::FileLine
+        directory::{DirError, Directory}, file::{FileLine, FileLineLocked}
     }
 };
 
@@ -23,7 +23,7 @@ pub async fn lock_line(
     handle_response(res)
 }
 
-fn handle_response(res: Result<Result<FileLine, DirError>, DirError>) -> SendTo {
+fn handle_response(res: Result<Result<FileLineLocked, DirError>, DirError>) -> SendTo {
     let lock_response = match res {
         Ok(v) => v,
         Err(e) => return wrap_dir_err(e)
@@ -48,23 +48,26 @@ async fn set_line_locked(
     user_id: String,
     dir: &Directory, 
     line_lock: LockLine
-) -> Result<FileLine, DirError> {
+) -> Result<FileLineLocked, DirError> {
     let files = dir.files.read().await;
     let file = match files.get(&filename) {
         Some(f) => f,
         None => return Err(DirError::NotFound(filename))
     };
     let lines = file.read().await;
-    let line = match lines.get(line_lock.line_pos) {
-        Some(v) => v,
-        None => return Err(DirError::DepthOutOfRange)
-    };
-    let mut line = line.write().await;
-    if let Some(_) = line.locked {
+    let lines: Vec<&FileLine> = lines.iter().filter(|l| l.add_no == line_lock.line_no).collect();
+    let line = if lines.len() == 0 { return Err(DirError::DepthOutOfRange) }
+    else { lines[0] };
+    let mut line_data = line.line_data.write().await;
+    if let Some(_) = line_data.locked {
         return Err(DirError::LineLocked(line_lock.clone()))
     }
-    line.lock(&user_id);
-    Ok::<FileLine, DirError>(line.clone())
+    line_data.locked = Some(user_id.clone());
+    let res = FileLineLocked {
+        add_no: line.add_no,
+        user_id: user_id
+    };
+    Ok(res)
 }
 
 
@@ -83,7 +86,7 @@ pub async fn new_line(
                 None => return Err(DirError::NotFound(f))
             };
             
-            let (new_line, _new_at) = file._insert_return_new_line(at, &user_id).await;
+            let (new_line, _new_at) = file.insert_return_new_line(at, &user_id).await;
             Ok(new_line)
         }.boxed()
     ).await;

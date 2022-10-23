@@ -204,7 +204,7 @@ impl Directory {
         let (file_name, file) = key_vals;
         let file_lines = file.read().await;
         let line_futures = file_lines.iter().map(|line| async {
-            line.read().await.get()
+            line.get().await
         });
         let lines = join_all(line_futures).await;
         (file_name.clone(), lines)
