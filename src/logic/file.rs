@@ -1,11 +1,11 @@
 use crate::{
     models::{
-        user_activity::LockLine,
+        user_activity::{LockLine, CreateLine},
         session_activity::{SendTo, SessionActivity},
         session::Session, 
         server_activity::ServerActivity, 
-        directory::{DirError, Directory}, file::{FileLine, FileLineLocked}
-    }
+        directory::{DirError, Directory}, file::{FileLine, FileLineLocked, FileLineAdded}
+    }, endpoints::user
 };
 
 use futures::FutureExt;
@@ -20,10 +20,10 @@ pub async fn lock_line(
     let res = session.rootdir.transverse_blocking(&line_lock.filepath.clone(), 0,
         |f, d| async move { set_line_locked(f, user_id, d, line_lock).await }.boxed()).await;
 
-    handle_response(res)
+    handle_locked_response(res)
 }
 
-fn handle_response(res: Result<Result<FileLineLocked, DirError>, DirError>) -> SendTo {
+fn handle_locked_response(res: Result<Result<FileLineLocked, DirError>, DirError>) -> SendTo {
     let lock_response = match res {
         Ok(v) => v,
         Err(e) => return wrap_dir_err(e)
@@ -72,13 +72,12 @@ async fn set_line_locked(
 
 
 pub async fn new_line(
-    at: usize,
     user_id: &String,
-    line_lock: LockLine, 
+    line_create: CreateLine, 
     session: &Session
 ) -> SendTo {
     let user_id = user_id.clone();
-    let res = session.rootdir.transverse_blocking(&line_lock.filepath.clone(), 0,
+    let res = session.rootdir.transverse_blocking(&line_create.filepath.clone(), 0,
         |f, d| async move { 
             let files = d.files.read().await;
             let file = match files.get(&user_id) {
@@ -86,11 +85,48 @@ pub async fn new_line(
                 None => return Err(DirError::NotFound(f))
             };
             
-            let (new_line, _new_at) = file.insert_return_new_line(at, &user_id).await;
+            let (new_line, _new_at) = file.insert_return_new_line(line_create.at, &user_id).await;
             Ok(new_line)
         }.boxed()
     ).await;
 
-    handle_response(res)
+    handle_created_response(res)
+}
+
+fn handle_created_response(res: Result<Result<FileLineAdded, DirError>, DirError>) -> SendTo {
+    let lock_response = match res {
+        Ok(v) => v,
+        Err(e) => return wrap_dir_err(e)
+    };
+    match lock_response {
+        Ok(v) => {
+            let server = ServerActivity::LineAdded(v).wrap_to_session();
+            SendTo::ToAllUsers(server)
+        },
+        Err(e) => wrap_dir_err(e)
+    }
+}
+
+pub async fn update_line(
+    user_id: &String,
+    line_create: CreateLine, 
+    session: &Session
+) -> SendTo {
+    let user_id = user_id.clone();
+    let res = session.rootdir.transverse_blocking(&line_create.filepath, 0, 
+        |f, d| async move {
+            let files = d.files.read().await;
+            let file = match files.get(&user_id) {
+                Some(v) => v,
+                None => return Err(DirError::NotFound(f))
+            };
+            let lines = file.read().await;
+            let lines: Vec<&FileLine> = lines.iter().filter(|l| l.add_no == line_create.at).collect();
+            
+            let (new_line, _new_at) = file.insert_return_new_line(line_create.at, &user_id).await;
+            Ok(new_line)
+        }.boxed()
+    ).await;
+    SendTo::ToNone
 }
 

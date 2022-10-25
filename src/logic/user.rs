@@ -150,6 +150,8 @@ async fn process_user_resquest(
             dir_logic::directory_changed(update, session).await,
         UserActivity::LockLine(lock) =>
             file_logic::lock_line(&user_id, lock, session).await,
+        UserActivity::CreateLine(create) =>
+            file_logic::new_line(&user_id, create, session).await,
         _ => SendTo::ToNone
     };
     send_response(&user_id, &res, session).await;

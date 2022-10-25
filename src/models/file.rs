@@ -119,22 +119,15 @@ impl File {
         }
     }
 
-    pub async fn insert_return_new_line(&self, at: usize, user_id: &String) -> (FileLineLocked, usize) {
+    pub async fn insert_return_new_line(&self, at: usize, user_id: &String) -> (FileLineAdded, usize) {
         let mut lines = self._write().await;
         let len = lines.len();
         let add_no = self.line_count.fetch_add(1, Ordering::Relaxed);
-        let line = FileLine {
-            add_no,
-            line_data: RwLock::new(FileLineData {
-                line: "".to_owned(),
-                locked: Some(user_id.clone())
-            })
-        };
+        
         let line = FileLine::_new_locked_at(add_no, user_id);
-        let line_copy = FileLineLocked {
+        let line_copy = FileLineAdded {
             add_no: line.add_no,
             user_id: user_id.clone()
-
         };
         let inserted_at = if at <= len {
             lines.push(line);
